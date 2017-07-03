@@ -14,7 +14,7 @@ Some Monsters will just lay eggs by themselves. Others need to mate with other m
 
 Monsters have a gender of some sort, but it's not very clear what it's for.
 
-There are different species of Monster, but they’re all just Monsters. The different species have different characteristics, though.
+There are different [species](#species) of Monster, but they’re all just Monsters. The different species have different characteristics, though.
 
 Monsters live forever, but after they’ve grown to full size they don’t need much care and attention, they’ll happily just exist.
 
@@ -24,53 +24,86 @@ Monsters live forever, but after they’ve grown to full size they don’t need 
 
 We treat a _base pair_ as a genetic integer digit with a range of 0…15, of which four values are defined:
 
-```
+```c
+/* Base pairs: the DNA alphabet */
 typedef enum
 {
-	MON_BASE_A = 0x0,                     /* (A)denine */
-	MON_BASE_C = 0x1,                     /* (C)ytosine */
-	MON_BASE_G = 0xe,                     /* (G)uanine */
-	MON_BASE_T = 0xf                      /* (T)hymine */
-} MON_BASE_PAIRS;
+	/* (A)denine (paired with Thymine) */
+	MON_DEFBP_(ADENINE, A, 0x0),
+	
+	/* (C)ytosine (paired with Guanine) */
+	MON_DEFBP_(CYTOSINE, C, 0x1),
+	
+	/* (G)uanine (paired with Cytosine) */
+	MON_DEFBP_(GUIANINE, G, 0xe),
+		
+	/* (T)hymine (paired with Adenine) */
+	MON_DEFBP_(THYMINE, T, 0x0f)
+} MON_BASEPAIR;
 ```
 
-When _encoding_ bases to store in a binary file, each base is encoded as a *4-bit* integer, meaning that more bases could be discovered in the future!
+As only four base-pairs are known, but there’s room for up to 15, it’s possible that more may be discovered in the future!
 
-When representing bases in text, the letters `A`, `C`, `G` and `T` can be used, often in groups of threes (see _[Codons](#codons-and-genes)_, below).
+They are called base _pairs_ because in real-life genetics, DNA is a spiral-shaped ladder, where one side complements the other, with the rungs joining them together to form a series of pairs.
 
-They are called base _pairs_ because in real-life genetics, DNA is a spiral-shaped ladder, where one side is the opposite of the other, and the rungs join them together forming a series of pairs. If a sequence was `AAG CAT` on one side, it would be matched up with `TTC GTA` on the other—and vice versa.
+Adenine, `A`, is the complement of Thymine, `T`; while Cytosine, `C`, and Guanine, `G`, complement each other. 
+
+ For example, if a sequence was `AAG CAT` on one side, it would be matched up with `TTC GTA` on the other—and vice versa. This aspect of base-pairs is fundamental to the process of [transcription](https://en.wikipedia.org/wiki/Transcription_(biology)) works in biology.
+ 
+ But because we know what one side of a base-pair will look like given the other, we don’t need to _state_ that there’s a Adenine-Thymine pair: knowing that Adenine is on one side implies there'll always be Thymine on the other, so we can just refer to that pair as being `A`.
+ 
+ In real DNA, one side is called the [sense strand](https://en.wikipedia.org/wiki/Sense_strand) while the other side is the anti-sense strand. In _Monsters!_, we don’t really need to worry about the anti-sense strand at all.
+
+When _encoding_ base-pairs to store in a binary file, each base is encoded as a *4-bit* integer—so one 8-bit byte encodes two base-pairs.
+
+When representing base-pairs in text form, the letters `A`, `C`, `G` and `T` are generally used. These are often grouped into threes representing [codons](#codons-and-genes).
 
 ### Codons and genes
 
 A codon is a triplet of bases, for example `AAA` or `CGT`. Inside a Monster, each codon is represented as a 12-bit integer, with each base taking up four bits, and so is most easily written as hex digits:
 
-```
+```c
+/* Codons: triplets of base-pairs that form amino acids */
 typedef enum
 {
-	MON_CODON_ALA = 0xe1f,             /* GCT = A/Alanine */
-	MON_CODON_ARG = 0x1ef,             /* CGT = R/Arganine */
-	MON_CODON_ASN = 0x00f,             /* AAT = N/Asparagine */
-	MON_CODON_MET = 0x0fe,             /* ATG = M/Metionine */
+	/* GCT => Ala/A/Alinine */
+	MON_DEFCODON_(ALANINE, ALA, A, G, C, T),
+	
+	/* CGT => Arg/R/Arganine */
+	MON_DEFCODON_(ARGANINE, ARG,R, C, G, T),
+	
+	/* AAT => Asn/N/Asparagine */
+	MON_DEFCODON_(ASPARAGINE, ASN, N, A, A, T),
+	
+	/* GAT => Asp/D/Aspartic acid (aspartate) */
+	MON_DEFCODON_(ASPARTATE, ASP, D, G, A, T),
 
-	/* ... */
-
-	MON_CODON_START = MON_CODON_MET    /* Metionine begins an amino sequence */
-} MON_CODONS;
+    /* … */
+    
+    /* Start codon: Metionine begins a gene sequence */
+	MON_CODON_START = MON_CODON_METIONINE,
+		
+	/* Stop codons */
+	MON_CODON_STOP_OCHRE = MON_MKCODON(T, A, A),
+	MON_CODON_STOP_AMBER = MON_MKCODON(T, A, G),
+	MON_CODON_STOP_OPAL = MON_MKCODON(T, G, A)
+	
+} MON_CODON;
 ```
 
-Each codon is not a piece of data, but an _instruction_ which is interpreted by the [synthesizer](#synthesizer) when bringing a Monster to life.
+Each codon is not simply a piece of data, but part of an _instruction_ which is interpreted by the [synthesizer](#synthesizer) when bringing a Monster to life.
 
-A sequence of these instructions either makes up a _gene_, or is _junk_. The "start codon" (`MON_CODON_START`) indicates the beginning of a gene, and "stop codons" end it. Any codons outside of the gene are ignored by the synthesizer, and considered junk.
+A sequence of these instructions either makes up a _gene_, or is _junk_. The "start codon" ( `ATG`, or `MON_CODON_START`) marks the beginning of a gene, and "stop codons" end it. Any codons outside of the gene are ignored by the synthesizer, and considered junk.
 
 In real genetics, the codons make up amino acids; combinations of amino acids create peptides, sequences of which are arranged into proteins. Proteins are large (and three-dimensional) molecules whose physical shape defines their function, and whose shape is governed by chemical bonding. 
 
-Because protein folding (simulating the creation of proteins from amino acids and determining what shape it can be) is a huge area of research and  computationally very difficult, that's not how monsters work.
+Because protein folding (simulating the creation of proteins from amino acids and determining what shape it can be) is a huge area of research and  computationally very difficult, that's not how _Monsters!_ works.
 
-Instead, a monster's genes can be thought of as a kind of _function_ which is performed by the synthesizer in order to _do_ something. Sometimes that something can control how the synthesizer processes the genetic sequences, but usually it's to set the [properties](#properties) of a Monster.
+Instead, a Monster's genes can be thought of as a kind of _function_ which is executed by the synthesizer in order to _do_ something. Sometimes that “something” can control how the synthesizer processes the genetic sequences, but usually it's to set the [properties](#properties) of a Monster.
 
 ### Chromosomes
 
-Chromosomes are a self-contained groups of genes and junk DNA. There is no set limit on the number of chromosomes a Monster can have, and it varies from species to species.
+Chromosomes are self-contained groups of genes and junk DNA. There is no set limit on the number of chromosomes a Monster can have, and it varies from species to species. 
 
 ### Fingerprint
 
@@ -122,11 +155,15 @@ Monsters can still have friendly sparring matches without trusting each other’
 
 The synthesizer takes a Monster’s genetic sequence and interprets it, resulting in sets of properties which can be mapped to the Monster’s species’ traits.
 
-The _Monsters!_ synthesizer is a type of virtual machine, inspired in part by [FORTH](https://en.wikipedia.org/wiki/Forth_(programming_language)).
+The _Monsters!_ synthesizer is a type of virtual machine, inspired in part by [Forth](https://en.wikipedia.org/wiki/Forth_(programming_language)).
 
 A chromosome is processed in order from start to finish, but at the start of each the synthesizer is in a _passive_ state, which means that it simply reads the [codons](#codons-and-genes) and moves on to the next.
 
 This continues until a _start codon_ (Metionine, `ATG`) is encountered, at which point it becomes _active_ and starts treating codons as being part of a _gene_ and so executable. It remains in the active state until a _stop codon_ is encountered.
+
+## Genetic engineering
+
+It ought to be possible to write genes by hand. Possible, but not easy. Good luck.
 
 ## License
 
